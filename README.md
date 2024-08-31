@@ -1,6 +1,4 @@
 
-
-```markdown
 # Guía para Levantar un Clúster de Kubernetes con Minikube y Desplegar una Aplicación
 
 ## Introducción

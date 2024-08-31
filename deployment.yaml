@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
         - name: my-app-container
-          image: ervincaravaliibarra/machinelearning:latest
+          image: ghcr.io/ervincaraval/machinglearning:c1e423f2e8f127a7a952250105b9348e4cdf18de
           ports:
             - containerPort: 8000

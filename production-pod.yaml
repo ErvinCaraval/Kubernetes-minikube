@@ -1,22 +1,205 @@
-apiVersion: v1
-kind: Pod
-metadata:
-  name: production-pod
-spec:
-  containers:
-  - name: nginx
-    image: nginx
-  tolerations:
-  - key: "environment"
-    operator: "Equal"
-    value: "production"
-    effect: "NoSchedule"
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: environment
-            operator: In
-            values:
-            - production
+---
+  # Shopping Cart Deployment
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: shopping-cart
+    labels:
+      app: shopping-cart
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: shopping-cart
+    template:
+      metadata:
+        labels:
+          app: shopping-cart
+      spec:
+        containers:
+        - name: shopping-cart
+          image: ervincaravaliibarra/cart-service:latest
+          ports:
+          - containerPort: 3000
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          # Se eliminaron las sondas de salud
+---
+  # Payment Service Deployment
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: payment-service
+    labels:
+      app: payment-service
+  spec:
+    replicas: 2
+    selector:
+      matchLabels:
+        app: payment-service
+    template:
+      metadata:
+        labels:
+          app: payment-service
+      spec:
+        containers:
+        - name: payment-service
+          image: tarampampam/error-pages:latest
+          env:
+          - name: ERROR_CODE
+            value: "500"
+          ports:
+          - containerPort: 8080
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+---
+  # Error Pages Deployment
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: error-pages
+    labels:
+      app: error-pages
+  spec:
+    replicas: 2
+    selector:
+      matchLabels:
+        app: error-pages
+    template:
+      metadata:
+        labels:
+          app: error-pages
+      spec:
+        containers:
+        - name: error-pages
+          image: tarampampam/error-pages:latest
+          env:
+          - name: TEMPLATE_NAME
+            value: "lost-in-space"
+          - name: SHOW_DETAILS
+            value: "true"
+          ports:
+          - containerPort: 8080
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+---
+  # Services
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: shopping-cart-service
+  spec:
+    selector:
+      app: shopping-cart
+    ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+    type: ClusterIP
+---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: payment-service
+  spec:
+    selector:
+      app: payment-service
+    ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    type: ClusterIP
+---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: error-pages-service
+  spec:
+    selector:
+      app: error-pages
+    ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    type: ClusterIP
+---
+  # Istio Gateway
+  apiVersion: networking.istio.io/v1alpha3
+  kind: Gateway
+  metadata:
+    name: shopping-cart-gateway
+  spec:
+    selector:
+      istio: ingressgateway
+    servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+      - "*"
+---
+  # Istio Virtual Service
+  apiVersion: networking.istio.io/v1alpha3
+  kind: VirtualService
+  metadata:
+    name: shopping-cart-routes
+  spec:
+    hosts:
+    - "*"
+    gateways:
+    - shopping-cart-gateway
+    http:
+    - match:
+      - uri:
+          exact: "/checkout"
+      route:
+      - destination:
+          host: payment-service
+          port:
+            number: 8080
+      fault:
+        abort:
+          percentage:
+            value: 100
+          httpStatus: 410
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: "5xx,gateway-error,connect-failure"
+---
+  # Istio Circuit Breaker
+  apiVersion: networking.istio.io/v1alpha3
+  kind: DestinationRule
+  metadata:
+    name: payment-circuit-breaker
+  spec:
+    host: payment-service
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 100
+        http:
+          http1MaxPendingRequests: 1
+          maxRequestsPerConnection: 1
+      outlierDetection:
+        consecutive5xxErrors: 1
+        interval: 1s
+        baseEjectionTime: 3m
+        maxEjectionPercent: 100
+  

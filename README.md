@@ -125,4 +125,7 @@ kubectl create -f production-pod.yaml
 
 ---
 
-Este `README.md` proporciona una visión general de los comandos utilizados para gestionar un clúster de Kubernetes con MicroK8s, explicar su propósito y cómo se utilizan en diferentes etapas del proceso de administración de pods y nodos.
+clea
+
+kubectl port-forward service/error-pages-service 8080:8080
+kubectl port-forward service/shopping-cart-service 3000:3000
